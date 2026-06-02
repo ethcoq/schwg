@@ -1,0 +1,14 @@
+#ifndef PQCLEAN_MLKEM768_CLEAN_VERIFY_H
+#define PQCLEAN_MLKEM768_CLEAN_VERIFY_H
+#include "params.h"
+#include <linux/stddef.h>
+#include <linux/types.h>
+#include <linux/types.h>
+
+int PQCLEAN_MLKEM768_CLEAN_verify(const uint8_t *a, const uint8_t *b, size_t len);
+
+void PQCLEAN_MLKEM768_CLEAN_cmov(uint8_t *r, const uint8_t *x, size_t len, uint8_t b);
+
+void PQCLEAN_MLKEM768_CLEAN_cmov_int16(int16_t *r, int16_t v, uint16_t b);
+
+#endif

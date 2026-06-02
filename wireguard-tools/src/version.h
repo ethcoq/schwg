@@ -1,0 +1,2 @@
+#define WIREGUARD_TOOLS_VERSION "1.0.20260223-custom1.0"
+
