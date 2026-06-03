@@ -125,6 +125,9 @@ bool
 wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 				     struct noise_handshake *handshake);
 struct wg_peer *
+wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
+				struct wg_device *wg);
+struct wg_peer *
 wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				      struct wg_device *wg);
 

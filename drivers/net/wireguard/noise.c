@@ -663,6 +663,28 @@ out:
 	return ret;
 }
 
+struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
+				struct wg_device *wg)
+{
+	struct wg_peer *peer = NULL;
+	u8 salt[16];
+	u8 hash[BLAKE2S_HASH_SIZE];
+	u8 public_key_hashed[16 + BLAKE2S_HASH_SIZE];
+	memcpy(salt, salt_hash, 16);
+	memcpy(hash, salt_hash + 16, BLAKE2S_HASH_SIZE);
+
+	list_for_each_entry(peer, &wg->peer_list, peer_list) {
+		u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
+		memcpy(concat_salt, salt, 16);
+		memcpy(concat_salt + 16, peer->device->static_identity.static_public, NOISE_PUBLIC_KEY_LEN);
+		blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
+		if (memcmp(public_key_hashed, salt_hash, 16 + BLAKE2S_HASH_SIZE) == 0) {
+			return peer;
+		}
+	}
+	return NULL;
+}
+
 struct wg_peer *
 wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				      struct wg_device *wg)
@@ -698,7 +720,7 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 		goto out;
 
 	/* Lookup which peer we're actually talking to */
-	peer = wg_pubkey_hashtable_lookup(wg->peer_hashtable, s);
+	peer = wg_pubkey_hash_lookup(s, wg);
 	if (!peer)
 		goto out;
 	handshake = &peer->handshake;
