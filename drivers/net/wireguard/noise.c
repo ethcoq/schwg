@@ -9,6 +9,7 @@
 #include "messages.h"
 #include "queueing.h"
 #include "peerlookup.h"
+#include "mlkem512/randombytes_kernel.h"
 
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
@@ -421,7 +422,7 @@ static void concat_shared_key(u8 dh_calculation[NOISE_PUBLIC_KEY_LEN],
 					u8 concat_output[NOISE_PUBLIC_KEY_LEN + 32])
 {
 	memcpy(concat_output, dh_calculation, NOISE_PUBLIC_KEY_LEN);
-	strncat(concat_output, shared_key, 32);
+	memcpy(concat_output + NOISE_PUBLIC_KEY_LEN, shared_key, 32);
 }
 
 static bool __must_check mix_dh_shared_key(u8 chaining_key[NOISE_HASH_LEN],
@@ -513,7 +514,7 @@ static void concat_ephemeral(u8 ephemeral_src[NOISE_PUBLIC_KEY_LEN],
 					u8 concat_output[NOISE_PUBLIC_KEY_LEN + MLKEM_PUBLIC_KEY_LEN])
 {
 	memcpy(concat_output, ephemeral_src, NOISE_PUBLIC_KEY_LEN);
-	strncat(concat_output, mlkem_ephemeral_src, MLKEM_PUBLIC_KEY_LEN);
+	memcpy(concat_output + NOISE_PUBLIC_KEY_LEN, mlkem_ephemeral_src, MLKEM_PUBLIC_KEY_LEN);
 }
 
 static void concat_ciphertext(u8 ephemeral_src[NOISE_PUBLIC_KEY_LEN], 
@@ -521,7 +522,7 @@ static void concat_ciphertext(u8 ephemeral_src[NOISE_PUBLIC_KEY_LEN],
 					u8 concat_output[NOISE_PUBLIC_KEY_LEN + MLKEM_CIPHERTEXT_LEN])
 {
 	memcpy(concat_output, ephemeral_src, NOISE_PUBLIC_KEY_LEN);
-	strncat(concat_output, mlkem_ciphertext_src, MLKEM_CIPHERTEXT_LEN);
+	memcpy(concat_output + NOISE_PUBLIC_KEY_LEN, mlkem_ciphertext_src, MLKEM_CIPHERTEXT_LEN);
 }
 
 static void message_ephemeral(u8 ephemeral_dst[NOISE_PUBLIC_KEY_LEN],
@@ -585,6 +586,8 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 {
 	u8 timestamp[NOISE_TIMESTAMP_LEN];
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
+	u8 salt[16];
+	u8 public_key_hashed[BLAKE2S_HASH_SIZE];
 	bool ret = false;
 
 	/* We need to wait for crng _before_ taking any locks, since
@@ -620,10 +623,21 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 		    handshake->remote_static))
 		goto out;
 
-	/* s */
+	/* modified s */
+	get_random_bytes(salt, 16);
+
+	u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
+	memcpy(concat_salt, salt, 16);
+	memcpy(concat_salt + 16, handshake->static_identity->static_public, NOISE_PUBLIC_KEY_LEN);
+	blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
+
+	u8 concat_encrypt[BLAKE2S_HASH_SIZE + 16];
+	memcpy(concat_encrypt, salt, 16);
+	memcpy(concat_encrypt + 16, public_key_hashed, BLAKE2S_HASH_SIZE);
+
 	message_encrypt(dst->encrypted_static,
-			handshake->static_identity->static_public,
-			NOISE_PUBLIC_KEY_LEN, key, handshake->hash);
+			concat_encrypt,
+			BLAKE2S_HASH_SIZE + 16, key, handshake->hash);
 
 	/* ss */
 	if (!mix_precomputed_dh(handshake->chaining_key, key,

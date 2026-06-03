@@ -85,7 +85,7 @@ struct message_handshake_initiation {
 	struct message_header header;
 	__le32 sender_index;
 	u8 unencrypted_ephemeral[NOISE_PUBLIC_KEY_LEN];
-	u8 encrypted_static[noise_encrypted_len(NOISE_PUBLIC_KEY_LEN + 16)];
+	u8 encrypted_static[noise_encrypted_len(BLAKE2S_HASH_SIZE + 16)];
 	u8 encrypted_timestamp[noise_encrypted_len(NOISE_TIMESTAMP_LEN)];
 	u8 mlkem_ephemeral_public[MLKEM_PUBLIC_KEY_LEN];
 	struct message_macs macs;
