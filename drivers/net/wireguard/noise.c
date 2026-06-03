@@ -584,6 +584,7 @@ bool
 wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 				     struct noise_handshake *handshake)
 {
+	pr_info("DEBUG create_initiation: starting the process\n");
 	u8 timestamp[NOISE_TIMESTAMP_LEN];
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	u8 salt[16];
@@ -606,8 +607,16 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	handshake_init(handshake->chaining_key, handshake->hash,
 		       handshake->remote_static);
 
+	pr_info("DEBUG create_initiation: MLKEM ephemeral keypair before creation : %02x%02x%02x%02x\n",
+		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
+		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
+
 	PQCLEAN_MLKEM512_CLEAN_crypto_kem_keypair(handshake->mlkem_ephemeral_public, handshake->mlkem_ephemeral_private);
 	memcpy(dst->mlkem_ephemeral_public, handshake->mlkem_ephemeral_public, MLKEM_PUBLIC_KEY_LEN);
+
+	pr_info("DEBUG create_initiation: MLKEM ephemeral keypair created : %02x%02x%02x%02x\n",
+		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
+		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
 
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
@@ -627,17 +636,47 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	get_random_bytes(salt, 16);
 
 	u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
+
+	pr_info("DEBUG create_initiation: salt before concat : %02x%02x%02x%02x\n",
+		salt[0], salt[1],
+		salt[2], salt[3]);
+
+	pr_info("DEBUG create_initiation: static key before concat : %02x%02x%02x%02x\n",
+		handshake->static_identity->static_public[0], handshake->static_identity->static_public[1],
+		handshake->static_identity->static_public[2], handshake->static_identity->static_public[3]);
+
 	memcpy(concat_salt, salt, 16);
 	memcpy(concat_salt + 16, handshake->static_identity->static_public, NOISE_PUBLIC_KEY_LEN);
+
+	pr_info("DEBUG create_initiation: concat obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
+		concat_salt[0], concat_salt[1],
+		concat_salt[2], concat_salt[3],
+		concat_salt[16], concat_salt[17],
+		concat_salt[18], concat_salt[19]);
+
 	blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
 
 	u8 concat_encrypt[BLAKE2S_HASH_SIZE + 16];
 	memcpy(concat_encrypt, salt, 16);
 	memcpy(concat_encrypt + 16, public_key_hashed, BLAKE2S_HASH_SIZE);
 
+	pr_info("DEBUG create_initiation: plaintext obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
+		concat_encrypt[0], concat_encrypt[1],
+		concat_encrypt[2], concat_encrypt[3],
+		concat_encrypt[16], concat_encrypt[17],
+		concat_encrypt[18], concat_encrypt[19]);
+
 	message_encrypt(dst->encrypted_static,
 			concat_encrypt,
 			BLAKE2S_HASH_SIZE + 16, key, handshake->hash);
+
+	pr_info("DEBUG create_initiation: cipher obtained : %02x%02x%02x%02x\n",
+		dst->encrypted_static[0], dst->encrypted_static[1],
+		dst->encrypted_static[2], dst->encrypted_static[3]);
+
+	pr_info("DEBUG create_initiation: key used for identity : %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	/* ss */
 	if (!mix_precomputed_dh(handshake->chaining_key, key,
@@ -648,6 +687,10 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	tai64n_now(timestamp);
 	message_encrypt(dst->encrypted_timestamp, timestamp,
 			NOISE_TIMESTAMP_LEN, key, handshake->hash);
+
+	pr_info("DEBUG create_initiation: key used for timestamp : %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -689,6 +732,7 @@ struct wg_peer *
 wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				      struct wg_device *wg)
 {
+	pr_info("DEBUG consume_initiation : starting the process\n");
 	struct wg_peer *peer = NULL, *ret_peer = NULL;
 	struct noise_handshake *handshake;
 	bool replay_attack, flood_attack;
@@ -710,9 +754,17 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	/* e */
 	message_ephemeral(e, src->unencrypted_ephemeral, epq, src->mlkem_ephemeral_public, chaining_key, hash);
 
+	pr_info("DEBUG consume_initiation: MLKEM ephemeral key received : %02x%02x%02x%02x\n",
+		src->mlkem_ephemeral_public[0], src->mlkem_ephemeral_public[1],
+		src->mlkem_ephemeral_public[2], src->mlkem_ephemeral_public[3]);
+
 	/* es */
 	if (!mix_dh(chaining_key, key, wg->static_identity.static_private, e))
 		goto out;
+
+	pr_info("DEBUG consume_initiation: key used for identity : %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	/* s */
 	if (!message_decrypt(s, src->encrypted_static,
@@ -722,13 +774,19 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	/* Lookup which peer we're actually talking to */
 	peer = wg_pubkey_hash_lookup(s, wg);
 	if (!peer)
+		pr_info("DEBUG consume_initiation: peer NOT found !\n");
 		goto out;
+	pr_info("DEBUG consume_initiation: peer found !\n");
 	handshake = &peer->handshake;
 
 	/* ss */
 	if (!mix_precomputed_dh(chaining_key, key,
 				handshake->precomputed_static_static))
 	    goto out;
+
+	pr_info("DEBUG consume_initiation: key used for timestamp : %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	/* {t} */
 	if (!message_decrypt(t, src->encrypted_timestamp,
