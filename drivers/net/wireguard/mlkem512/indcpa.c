@@ -9,6 +9,8 @@
 #include <linux/types.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/slab.h>
+#include <linux/gfp.h>
 
 /*************************************************
 * Name:        pack_pk

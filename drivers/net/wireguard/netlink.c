@@ -17,13 +17,9 @@
 #include <net/sock.h>
 #include <crypto/utils.h>
 
-#define WGDEVICE_A_MLKEM_PRIVATE_KEY  (__WGDEVICE_A_LAST)
-#define WGDEVICE_A_MLKEM_PUBLIC_KEY   (__WGDEVICE_A_LAST + 1)
-#define WGPEER_A_MLKEM_PUBLIC_KEY     (__WGPEER_A_LAST)
-
 static struct genl_family genl_family;
 
-static const struct nla_policy device_policy[WGDEVICE_A_MAX + 3] = {
+static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 	[WGDEVICE_A_IFINDEX]		= { .type = NLA_U32 },
 	[WGDEVICE_A_IFNAME]		= { .type = NLA_NUL_STRING, .len = IFNAMSIZ - 1 },
 	[WGDEVICE_A_PRIVATE_KEY]	= NLA_POLICY_EXACT_LEN(NOISE_PUBLIC_KEY_LEN),
@@ -31,9 +27,7 @@ static const struct nla_policy device_policy[WGDEVICE_A_MAX + 3] = {
 	[WGDEVICE_A_FLAGS]		= { .type = NLA_U32 },
 	[WGDEVICE_A_LISTEN_PORT]	= { .type = NLA_U16 },
 	[WGDEVICE_A_FWMARK]		= { .type = NLA_U32 },
-	[WGDEVICE_A_PEERS]		= { .type = NLA_NESTED },
-	[WGDEVICE_A_MLKEM_PRIVATE_KEY]	= NLA_POLICY_EXACT_LEN(MLKEM_PRIVATE_KEY_LEN),
-	[WGDEVICE_A_MLKEM_PUBLIC_KEY]		= NLA_POLICY_EXACT_LEN(MLKEM_PUBLIC_KEY_LEN)
+	[WGDEVICE_A_PEERS]		= { .type = NLA_NESTED }
 };
 
 static const struct nla_policy peer_policy[WGPEER_A_MAX + 2] = {
@@ -46,8 +40,7 @@ static const struct nla_policy peer_policy[WGPEER_A_MAX + 2] = {
 	[WGPEER_A_RX_BYTES]				= { .type = NLA_U64 },
 	[WGPEER_A_TX_BYTES]				= { .type = NLA_U64 },
 	[WGPEER_A_ALLOWEDIPS]				= { .type = NLA_NESTED },
-	[WGPEER_A_PROTOCOL_VERSION]			= { .type = NLA_U32 },
-	[WGPEER_A_MLKEM_PUBLIC_KEY]			= NLA_POLICY_EXACT_LEN(MLKEM_PUBLIC_KEY_LEN)
+	[WGPEER_A_PROTOCOL_VERSION]			= { .type = NLA_U32 }
 };
 
 static const struct nla_policy allowedip_policy[WGALLOWEDIP_A_MAX + 1] = {
@@ -123,13 +116,6 @@ get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 	down_read(&peer->handshake.lock);
 	fail = nla_put(skb, WGPEER_A_PUBLIC_KEY, NOISE_PUBLIC_KEY_LEN,
 		       peer->handshake.remote_static);
-	up_read(&peer->handshake.lock);
-	if (fail)
-		goto err;
-
-	down_read(&peer->handshake.lock);
-	fail = nla_put(skb, WGPEER_A_MLKEM_PUBLIC_KEY, MLKEM_PUBLIC_KEY_LEN,
-		       peer->handshake.remote_mlkem_static);
 	up_read(&peer->handshake.lock);
 	if (fail)
 		goto err;
@@ -257,10 +243,7 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 				    wg->static_identity.static_private) ||
 			    nla_put(skb, WGDEVICE_A_PUBLIC_KEY,
 				    NOISE_PUBLIC_KEY_LEN,
-				    wg->static_identity.static_public) ||
-			    nla_put(skb, WGDEVICE_A_MLKEM_PUBLIC_KEY,
-				    MLKEM_PUBLIC_KEY_LEN,
-				    wg->static_identity.mlkem.public_key)) {
+				    wg->static_identity.static_public)) {
 				up_read(&wg->static_identity.lock);
 				goto out;
 			}
@@ -373,7 +356,7 @@ static int set_allowedip(struct wg_peer *peer, struct nlattr **attrs)
 
 static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 {
-	u8 *public_key = NULL, *preshared_key = NULL, *mlkem_public_key = NULL;
+	u8 *public_key = NULL, *preshared_key = NULL;
 	struct wg_peer *peer = NULL;
 	u32 flags = 0;
 	int ret;
@@ -382,12 +365,6 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 	if (attrs[WGPEER_A_PUBLIC_KEY] &&
 	    nla_len(attrs[WGPEER_A_PUBLIC_KEY]) == NOISE_PUBLIC_KEY_LEN)
 		public_key = nla_data(attrs[WGPEER_A_PUBLIC_KEY]);
-	else
-		goto out;
-
-	if (attrs[WGPEER_A_MLKEM_PUBLIC_KEY] &&
-	    nla_len(attrs[WGPEER_A_MLKEM_PUBLIC_KEY]) == MLKEM_PUBLIC_KEY_LEN)
-		mlkem_public_key = nla_data(attrs[WGPEER_A_MLKEM_PUBLIC_KEY]);
 	else
 		goto out;
 
@@ -433,7 +410,7 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 		}
 		up_read(&wg->static_identity.lock);
 
-		peer = wg_peer_create(wg, public_key, preshared_key, mlkem_public_key);
+		peer = wg_peer_create(wg, public_key, preshared_key);
 		if (IS_ERR(peer)) {
 			ret = PTR_ERR(peer);
 			peer = NULL;
@@ -603,26 +580,6 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 		up_write(&wg->static_identity.lock);
 	}
 skip_set_private_key:
-
-	if (info->attrs[WGDEVICE_A_MLKEM_PRIVATE_KEY] &&
-	    nla_len(info->attrs[WGDEVICE_A_MLKEM_PRIVATE_KEY]) ==
-		    MLKEM_PRIVATE_KEY_LEN) {
-		down_write(&wg->static_identity.lock);
-		memcpy(wg->static_identity.mlkem.private_key, 
-			nla_data(info->attrs[WGDEVICE_A_MLKEM_PRIVATE_KEY]),
-			MLKEM_PRIVATE_KEY_LEN);
-		up_write(&wg->static_identity.lock);
-	}
-
-	if (info->attrs[WGDEVICE_A_MLKEM_PUBLIC_KEY] &&
-	    nla_len(info->attrs[WGDEVICE_A_MLKEM_PUBLIC_KEY]) ==
-		    MLKEM_PUBLIC_KEY_LEN) {
-		down_write(&wg->static_identity.lock);
-		memcpy(wg->static_identity.mlkem.public_key, 
-			nla_data(info->attrs[WGDEVICE_A_MLKEM_PUBLIC_KEY]),
-			MLKEM_PUBLIC_KEY_LEN);
-		up_write(&wg->static_identity.lock);
-	}
 
 	if (info->attrs[WGDEVICE_A_PEERS]) {
 		struct nlattr *attr, *peer[WGPEER_A_MAX + 1];
