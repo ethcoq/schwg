@@ -732,9 +732,12 @@ struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
 		pr_info("DEBUG pubkey_hash_lookup : trying a peer \n");
 		u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
 		memcpy(concat_salt, salt, 16);
-		memcpy(concat_salt + 16, peer->device->static_identity.static_public, NOISE_PUBLIC_KEY_LEN);
+		memcpy(concat_salt + 16, peer->handshake.remote_static, NOISE_PUBLIC_KEY_LEN);
+		pr_info("DEBUG pubkey_hash_lookup : peer static tried : %02x%02x%02x%02x\n",
+		peer->handshake.remote_static[0], peer->handshake.remote_static[1],
+		peer->handshake.remote_static[2], peer->handshake.remote_static[3]);
 		blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
-		pr_info("DEBUG pubkey_hash_lookup : salt obtained from peer : %02x%02x%02x%02x\n",
+		pr_info("DEBUG pubkey_hash_lookup : hash obtained from peer : %02x%02x%02x%02x\n",
 		public_key_hashed[0], public_key_hashed[1],
 		public_key_hashed[2], public_key_hashed[3]);
 		if (memcmp(public_key_hashed, hash, BLAKE2S_HASH_SIZE) == 0) {
