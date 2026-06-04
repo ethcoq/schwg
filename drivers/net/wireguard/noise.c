@@ -720,12 +720,24 @@ struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
 	memcpy(salt, salt_hash, 16);
 	memcpy(hash, salt_hash + 16, BLAKE2S_HASH_SIZE);
 
+	pr_info("DEBUG pubkey_hash_lookup : salt obtained : %02x%02x%02x%02x\n",
+		salt[0], salt[1],
+		salt[2], salt[3]);
+
+	pr_info("DEBUG pubkey_hash_lookup : hash obtained : %02x%02x%02x%02x\n",
+		hash[0], hash[1],
+		hash[2], hash[3]);
+
 	list_for_each_entry(peer, &wg->peer_list, peer_list) {
+		pr_info("DEBUG pubkey_hash_lookup : trying a peer \n");
 		u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
 		memcpy(concat_salt, salt, 16);
 		memcpy(concat_salt + 16, peer->device->static_identity.static_public, NOISE_PUBLIC_KEY_LEN);
 		blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
-		if (memcmp(public_key_hashed, salt_hash, 16 + BLAKE2S_HASH_SIZE) == 0) {
+		pr_info("DEBUG pubkey_hash_lookup : salt obtained from peer : %02x%02x%02x%02x\n",
+		public_key_hashed[0], public_key_hashed[1],
+		public_key_hashed[2], public_key_hashed[3]);
+		if (memcmp(public_key_hashed, hash, BLAKE2S_HASH_SIZE) == 0) {
 			return peer;
 		}
 	}
@@ -774,6 +786,12 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	if (!message_decrypt(s, src->encrypted_static,
 			     sizeof(src->encrypted_static), key, hash))
 		goto out;
+
+	pr_info("DEBUG consume_initiation: decrypted concat obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
+		s[0], s[1],
+		s[2], s[3],
+		s[16], s[17],
+		s[18], s[19]);
 
 	/* Lookup which peer we're actually talking to */
 	peer = wg_pubkey_hash_lookup(s, wg);
