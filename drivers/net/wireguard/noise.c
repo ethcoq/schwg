@@ -627,6 +627,10 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 			  dst->unencrypted_ephemeral, dst->mlkem_ephemeral_public, dst->mlkem_ephemeral_public, handshake->chaining_key,
 			  handshake->hash);
 
+	pr_info("DEBUG create_initiation: MLKEM ephemeral key sent : %02x%02x%02x%02x\n",
+		dst->mlkem_ephemeral_public[0], dst->mlkem_ephemeral_public[1],
+		dst->mlkem_ephemeral_public[2], dst->mlkem_ephemeral_public[3]);
+
 	/* es */
 	if (!mix_dh(handshake->chaining_key, key, handshake->ephemeral_private,
 		    handshake->remote_static))
