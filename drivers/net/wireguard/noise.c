@@ -880,18 +880,22 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 	dst->header.type = cpu_to_le32(MESSAGE_HANDSHAKE_RESPONSE);
 	dst->receiver_index = handshake->remote_index;
 
-	pr_info("DEBUG create_response: preshared_key before MLKEM: %02x%02x%02x%02x\n",
-		handshake->preshared_key[0], handshake->preshared_key[1],
-		handshake->preshared_key[2], handshake->preshared_key[3]);
-
 	/* encaps secret PQ*/
 	if (PQCLEAN_MLKEM512_CLEAN_crypto_kem_enc(dst->mlkem_ciphertext, 
 			handshake->shared_key, handshake->mlkem_ephemeral_public) != 0)
 		goto out;
 
-	pr_info("DEBUG create_response: preshared_key after MLKEM: %02x%02x%02x%02x\n",
-		handshake->preshared_key[0], handshake->preshared_key[1],
-		handshake->preshared_key[2], handshake->preshared_key[3]);
+	pr_info("DEBUG create_response: key used for MLKEM: %02x%02x%02x%02x\n",
+		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
+		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
+
+	pr_info("DEBUG create_response: shared_key obtained: %02x%02x%02x%02x\n",
+		handshake->shared_key[0], handshake->shared_key[1],
+		handshake->shared_key[2], handshake->shared_key[3]);
+
+	pr_info("DEBUG create_response: ciphertext after MLKEM: %02x%02x%02x%02x\n",
+		dst->mlkem_ciphertext[0], dst->mlkem_ciphertext[1],
+		dst->mlkem_ciphertext[2], dst->mlkem_ciphertext[3]);
 
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
@@ -918,6 +922,10 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 
 	/* {} */
 	message_encrypt(dst->encrypted_nothing, NULL, 0, key, handshake->hash);
+
+	pr_info("DEBUG create_response: key used for encrypt nothing: %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -975,18 +983,22 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 	if (state != HANDSHAKE_CREATED_INITIATION)
 		goto fail;
 
-	pr_info("DEBUG consume_response: preshared_key before MLKEM: %02x%02x%02x%02x\n",
-		preshared_key[0], preshared_key[1],
-		preshared_key[2], preshared_key[3]);
+	pr_info("DEBUG consume_response: ciphertext before MLKEM: %02x%02x%02x%02x\n",
+		mlkem_ciphertext[0], mlkem_ciphertext[1],
+		mlkem_ciphertext[2], mlkem_ciphertext[3]);
+
+	pr_info("DEBUG create_response: key used for MLKEM: %02x%02x%02x%02x\n",
+		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
+		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
 
 	/*decaps secret PQ*/
 	if (PQCLEAN_MLKEM512_CLEAN_crypto_kem_dec(handshake->shared_key, 
 			mlkem_ciphertext, handshake->mlkem_ephemeral_private) != 0)
 		goto out;
 
-	pr_info("DEBUG consume_response: preshared_key after MLKEM: %02x%02x%02x%02x\n",
-		preshared_key[0], preshared_key[1],
-		preshared_key[2], preshared_key[3]);
+	pr_info("DEBUG consume_response: shared_key after MLKEM: %02x%02x%02x%02x\n",
+		handshake->shared_key[0], handshake->shared_key[1],
+		handshake->shared_key[2], handshake->shared_key[3]);
 
 	/* e */
 	message_ephemeral_resp(e, src->unencrypted_ephemeral, mlkem_ciphertext, mlkem_ciphertext, chaining_key, hash);
@@ -1001,6 +1013,10 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 	
 	/* psk */
 	mix_psk(chaining_key, hash, key, preshared_key);
+
+	pr_info("DEBUG consume_response: key used for decrypt nothing: %02x%02x%02x%02x\n",
+		key[0], key[1],
+		key[2], key[3]);
 
 	/* {} */
 	if (!message_decrypt(NULL, src->encrypted_nothing,
