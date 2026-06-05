@@ -787,6 +787,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	u8 t[NOISE_TIMESTAMP_LEN];
 	u64 initiation_consumption;
 
+	pr_info("DEBUG consume_initiation: init eph public key DH unencrypted_ephemeral: %02x%02x%02x%02x\n",
+		src->unencrypted_ephemeral[0], src->unencrypted_ephemeral[1],
+		src->unencrypted_ephemeral[2], src->unencrypted_ephemeral[3]);
+
 	down_read(&wg->static_identity.lock);
 	if (unlikely(!wg->static_identity.has_identity))
 		goto out;
@@ -796,6 +800,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	/* e */
 	message_ephemeral(e, src->unencrypted_ephemeral, epq, src->mlkem_ephemeral_public, chaining_key, hash);
 
+	pr_info("DEBUG consume_initiation: init eph public key DH e 01: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
+
 	pr_info("DEBUG consume_initiation: MLKEM ephemeral key received : %02x%02x%02x%02x\n",
 		src->mlkem_ephemeral_public[0], src->mlkem_ephemeral_public[1],
 		src->mlkem_ephemeral_public[2], src->mlkem_ephemeral_public[3]);
@@ -803,6 +811,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	/* es */
 	if (!mix_dh(chaining_key, key, wg->static_identity.static_private, e))
 		goto out;
+
+	pr_info("DEBUG consume_initiation: init eph public key DH e 02: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
 
 	pr_info("DEBUG consume_initiation: key used for identity : %02x%02x%02x%02x\n",
 		key[0], key[1],
@@ -812,6 +824,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	if (!message_decrypt(s, src->encrypted_static,
 			     sizeof(src->encrypted_static), key, hash))
 		goto out;
+
+	pr_info("DEBUG consume_initiation: init eph public key DH e 02.5: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
 
 	pr_info("DEBUG consume_initiation: decrypted concat obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
 		s[0], s[1],
@@ -833,6 +849,11 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				handshake->precomputed_static_static))
 	    goto out;
 
+	pr_info("DEBUG consume_initiation: init eph public key DH e 03: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
+
+
 	pr_info("DEBUG consume_initiation: key used for timestamp : %02x%02x%02x%02x\n",
 		key[0], key[1],
 		key[2], key[3]);
@@ -841,6 +862,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	if (!message_decrypt(t, src->encrypted_timestamp,
 			     sizeof(src->encrypted_timestamp), key, hash))
 		goto out;
+
+	pr_info("DEBUG consume_initiation: init eph public key DH e 04: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
 
 	down_read(&handshake->lock);
 	replay_attack = memcmp(t, handshake->latest_timestamp,
@@ -851,6 +876,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	up_read(&handshake->lock);
 	if (replay_attack || flood_attack)
 		goto out;
+
+	pr_info("DEBUG consume_initiation: init eph public key DH e 05: %02x%02x%02x%02x\n",
+		e[0], e[1],
+		e[2], e[3]);
 
 	/* Success! Copy everything to peer */
 	down_write(&handshake->lock);
@@ -868,6 +897,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	up_write(&handshake->lock);
 	ret_peer = peer;
 
+	pr_info("DEBUG consume_initiation: init eph public key DH in memory: %02x%02x%02x%02x\n",
+		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
+		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
+
 out:
 	memzero_explicit(key, NOISE_SYMMETRIC_KEY_LEN);
 	memzero_explicit(hash, NOISE_HASH_LEN);
@@ -883,6 +916,10 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 {
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	bool ret = false;
+
+	pr_info("DEBUG create_response: init eph public key DH used 01: %02x%02x%02x%02x\n",
+		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
+		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
 
 	/* We need to wait for crng _before_ taking any locks, since
 	 * curve25519_generate_secret uses get_random_bytes_wait.
@@ -940,6 +977,10 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 	pr_info("DEBUG create_response: chaining_key C6: %02x%02x%02x%02x\n",
 		handshake->chaining_key[0], handshake->chaining_key[1],
 		handshake->chaining_key[2], handshake->chaining_key[3]);
+
+	pr_info("DEBUG create_response: init eph public key DH used 02: %02x%02x%02x%02x\n",
+		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
+		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
 
 	/* ee */
 	if (!mix_dh_shared_key(handshake->chaining_key, NULL, handshake->ephemeral_private,
