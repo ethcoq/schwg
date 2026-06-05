@@ -436,6 +436,15 @@ static bool __must_check mix_dh_shared_key(u8 chaining_key[NOISE_HASH_LEN],
 
 	if (unlikely(!curve25519(dh_calculation, private, public)))
 		return false;
+	pr_info("DEBUG mix_dh_shared_key: dh_calculation : %02x%02x%02x%02x\n",
+		dh_calculation[0], dh_calculation[1],
+		dh_calculation[2], dh_calculation[3]);
+	pr_info("DEBUG mix_dh_shared_key: private used : %02x%02x%02x%02x\n",
+		private[0], private[1],
+		private[2], private[3]);
+	pr_info("DEBUG mix_dh_shared_key: public used : %02x%02x%02x%02x\n",
+		public[0], public[1],
+		public[2], public[3]);
 	concat_shared_key(dh_calculation, shared_key, concat_shk);
 	kdf(chaining_key, key, NULL, concat_shk, NOISE_HASH_LEN,
 	    NOISE_SYMMETRIC_KEY_LEN, 0, NOISE_PUBLIC_KEY_LEN + 32, chaining_key);
@@ -623,6 +632,15 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	if (!curve25519_generate_public(dst->unencrypted_ephemeral,
 					handshake->ephemeral_private))
 		goto out;
+
+	pr_info("DEBUG create_initiation: init eph public key DH: %02x%02x%02x%02x\n",
+		dst->unencrypted_ephemeral[0], dst->unencrypted_ephemeral[1],
+		dst->unencrypted_ephemeral[2], dst->unencrypted_ephemeral[3]);
+
+	pr_info("DEBUG create_initiation: init eph private key DH: %02x%02x%02x%02x\n",
+		handshake->ephemeral_private[0], handshake->ephemeral_private[1],
+		handshake->ephemeral_private[2], handshake->ephemeral_private[3]);
+
 	message_ephemeral(dst->unencrypted_ephemeral,
 			  dst->unencrypted_ephemeral, dst->mlkem_ephemeral_public, dst->mlkem_ephemeral_public, handshake->chaining_key,
 			  handshake->hash);
@@ -903,17 +921,25 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 					handshake->ephemeral_private))
 		goto out;
 
+	pr_info("DEBUG create_response: resp eph public key DH: %02x%02x%02x%02x\n",
+		dst->unencrypted_ephemeral[0], dst->unencrypted_ephemeral[1],
+		dst->unencrypted_ephemeral[2], dst->unencrypted_ephemeral[3]);
+
+	pr_info("DEBUG create_response: resp eph private key DH: %02x%02x%02x%02x\n",
+		handshake->ephemeral_private[0], handshake->ephemeral_private[1],
+		handshake->ephemeral_private[2], handshake->ephemeral_private[3]);
+
 	pr_info("DEBUG create_response: chaining_key C4: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
+		handshake->chaining_key[0], handshake->chaining_key[1],
+		handshake->chaining_key[2], handshake->chaining_key[3]);
 
 	message_ephemeral_resp(dst->unencrypted_ephemeral,
 			  dst->unencrypted_ephemeral, dst->mlkem_ciphertext, dst->mlkem_ciphertext, handshake->chaining_key,
 			  handshake->hash);
 
 	pr_info("DEBUG create_response: chaining_key C6: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
+		handshake->chaining_key[0], handshake->chaining_key[1],
+		handshake->chaining_key[2], handshake->chaining_key[3]);
 
 	/* ee */
 	if (!mix_dh_shared_key(handshake->chaining_key, NULL, handshake->ephemeral_private,
@@ -921,8 +947,8 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 		goto out;
 
 	pr_info("DEBUG create_response: chaining_key C7: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
+		handshake->chaining_key[0], handshake->chaining_key[1],
+		handshake->chaining_key[2], handshake->chaining_key[3]);
 
 	/* se */
 	if (!mix_dh(handshake->chaining_key, NULL, handshake->ephemeral_private,
@@ -930,16 +956,16 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 		goto out;
 
 	pr_info("DEBUG create_response: chaining_key C8: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
+		handshake->chaining_key[0], handshake->chaining_key[1],
+		handshake->chaining_key[2], handshake->chaining_key[3]);
 
 	/* psk */
 	mix_psk(handshake->chaining_key, handshake->hash, key,
 		handshake->preshared_key);
 
 	pr_info("DEBUG create_response: chaining_key C9: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
+		handshake->chaining_key[0], handshake->chaining_key[1],
+		handshake->chaining_key[2], handshake->chaining_key[3]);
 
 	/* {} */
 	message_encrypt(dst->encrypted_nothing, NULL, 0, key, handshake->hash);
@@ -1008,7 +1034,7 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 		mlkem_ciphertext[0], mlkem_ciphertext[1],
 		mlkem_ciphertext[2], mlkem_ciphertext[3]);
 
-	pr_info("DEBUG create_response: key used for MLKEM: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: key used for MLKEM: %02x%02x%02x%02x\n",
 		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
 		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
 
@@ -1021,14 +1047,14 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 		handshake->shared_key[0], handshake->shared_key[1],
 		handshake->shared_key[2], handshake->shared_key[3]);
 
-	pr_info("DEBUG create_response: chaining_key C4: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: chaining_key C4: %02x%02x%02x%02x\n",
 		chaining_key[0], chaining_key[1],
 		chaining_key[2], chaining_key[3]);
 
 	/* e */
 	message_ephemeral_resp(e, src->unencrypted_ephemeral, mlkem_ciphertext, mlkem_ciphertext, chaining_key, hash);
 
-	pr_info("DEBUG create_response: chaining_key C6: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: chaining_key C6: %02x%02x%02x%02x\n",
 		chaining_key[0], chaining_key[1],
 		chaining_key[2], chaining_key[3]);
 
@@ -1036,7 +1062,7 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 	if (!mix_dh_shared_key(chaining_key, NULL, ephemeral_private, e, handshake->shared_key))
 		goto fail;
 
-	pr_info("DEBUG create_response: chaining_key C7: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: chaining_key C7: %02x%02x%02x%02x\n",
 		chaining_key[0], chaining_key[1],
 		chaining_key[2], chaining_key[3]);
 
@@ -1044,14 +1070,14 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 	if (!mix_dh(chaining_key, NULL, wg->static_identity.static_private, e))
 		goto fail;
 
-	pr_info("DEBUG create_response: chaining_key C8: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: chaining_key C8: %02x%02x%02x%02x\n",
 		chaining_key[0], chaining_key[1],
 		chaining_key[2], chaining_key[3]);
 	
 	/* psk */
 	mix_psk(chaining_key, hash, key, preshared_key);
 
-	pr_info("DEBUG create_response: chaining_key C9: %02x%02x%02x%02x\n",
+	pr_info("DEBUG consume_response: chaining_key C9: %02x%02x%02x%02x\n",
 		chaining_key[0], chaining_key[1],
 		chaining_key[2], chaining_key[3]);
 
