@@ -781,7 +781,7 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	u8 chaining_key[NOISE_HASH_LEN];
 	u8 hash[NOISE_HASH_LEN];
-	u8 s[NOISE_PUBLIC_KEY_LEN];
+	u8 s[NOISE_PUBLIC_KEY_LEN + 16];
 	u8 e[NOISE_PUBLIC_KEY_LEN];
 	u8 epq[MLKEM_PUBLIC_KEY_LEN];
 	u8 t[NOISE_TIMESTAMP_LEN];
