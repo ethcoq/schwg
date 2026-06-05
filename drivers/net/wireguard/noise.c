@@ -728,6 +728,8 @@ struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
 		hash[0], hash[1],
 		hash[2], hash[3]);
 
+	mutex_lock(&wg->device_update_lock);
+
 	list_for_each_entry(peer, &wg->peer_list, peer_list) {
 		pr_info("DEBUG pubkey_hash_lookup : trying a peer \n");
 		u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
@@ -741,10 +743,13 @@ struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
 		public_key_hashed[0], public_key_hashed[1],
 		public_key_hashed[2], public_key_hashed[3]);
 		if (memcmp(public_key_hashed, hash, BLAKE2S_HASH_SIZE) == 0) {
-			return peer;
+			pr_info("DEBUG pubkey_hash_lookup : hash are equals : found peer");
+			peer = wg_peer_get_maybe_zero(peer);
+			break;
 		}
 	}
-	return NULL;
+	mutex_unlock(&wg->device_update_lock);
+	return peer;
 }
 
 struct wg_peer *
@@ -798,9 +803,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 
 	/* Lookup which peer we're actually talking to */
 	peer = wg_pubkey_hash_lookup(s, wg);
-	if (!peer)
+	if (!peer) {
 		pr_info("DEBUG consume_initiation: peer NOT found !\n");
 		goto out;
+	}
 	pr_info("DEBUG consume_initiation: peer found !\n");
 	handshake = &peer->handshake;
 
