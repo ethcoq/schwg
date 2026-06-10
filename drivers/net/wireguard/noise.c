@@ -18,6 +18,10 @@
 #include <linux/highmem.h>
 #include <crypto/utils.h>
 
+#include <linux/ktime.h>
+ktime_t t_start;
+ktime_t t_end;
+
 /* This implements Noise_IKpsk2:
  *
  * <- s
@@ -436,15 +440,6 @@ static bool __must_check mix_dh_shared_key(u8 chaining_key[NOISE_HASH_LEN],
 
 	if (unlikely(!curve25519(dh_calculation, private, public)))
 		return false;
-	pr_info("DEBUG mix_dh_shared_key: dh_calculation : %02x%02x%02x%02x\n",
-		dh_calculation[0], dh_calculation[1],
-		dh_calculation[2], dh_calculation[3]);
-	pr_info("DEBUG mix_dh_shared_key: private used : %02x%02x%02x%02x\n",
-		private[0], private[1],
-		private[2], private[3]);
-	pr_info("DEBUG mix_dh_shared_key: public used : %02x%02x%02x%02x\n",
-		public[0], public[1],
-		public[2], public[3]);
 	concat_shared_key(dh_calculation, shared_key, concat_shk);
 	kdf(chaining_key, key, NULL, concat_shk, NOISE_HASH_LEN,
 	    NOISE_SYMMETRIC_KEY_LEN, 0, NOISE_PUBLIC_KEY_LEN + 32, chaining_key);
@@ -593,7 +588,7 @@ bool
 wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 				     struct noise_handshake *handshake)
 {
-	pr_info("DEBUG create_initiation: starting the process\n");
+	t_start = ktime_get();
 	u8 timestamp[NOISE_TIMESTAMP_LEN];
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	u8 salt[16];
@@ -616,16 +611,8 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	handshake_init(handshake->chaining_key, handshake->hash,
 		       handshake->remote_static);
 
-	pr_info("DEBUG create_initiation: MLKEM ephemeral keypair before creation : %02x%02x%02x%02x\n",
-		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
-		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
-
 	PQCLEAN_MLKEM512_CLEAN_crypto_kem_keypair(handshake->mlkem_ephemeral_public, handshake->mlkem_ephemeral_private);
 	memcpy(dst->mlkem_ephemeral_public, handshake->mlkem_ephemeral_public, MLKEM_PUBLIC_KEY_LEN);
-
-	pr_info("DEBUG create_initiation: MLKEM ephemeral keypair created : %02x%02x%02x%02x\n",
-		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
-		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
 
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
@@ -633,21 +620,9 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 					handshake->ephemeral_private))
 		goto out;
 
-	pr_info("DEBUG create_initiation: init eph public key DH: %02x%02x%02x%02x\n",
-		dst->unencrypted_ephemeral[0], dst->unencrypted_ephemeral[1],
-		dst->unencrypted_ephemeral[2], dst->unencrypted_ephemeral[3]);
-
-	pr_info("DEBUG create_initiation: init eph private key DH: %02x%02x%02x%02x\n",
-		handshake->ephemeral_private[0], handshake->ephemeral_private[1],
-		handshake->ephemeral_private[2], handshake->ephemeral_private[3]);
-
 	message_ephemeral(dst->unencrypted_ephemeral,
 			  dst->unencrypted_ephemeral, dst->mlkem_ephemeral_public, dst->mlkem_ephemeral_public, handshake->chaining_key,
 			  handshake->hash);
-
-	pr_info("DEBUG create_initiation: MLKEM ephemeral key sent : %02x%02x%02x%02x\n",
-		dst->mlkem_ephemeral_public[0], dst->mlkem_ephemeral_public[1],
-		dst->mlkem_ephemeral_public[2], dst->mlkem_ephemeral_public[3]);
 
 	/* es */
 	if (!mix_dh(handshake->chaining_key, key, handshake->ephemeral_private,
@@ -659,22 +634,8 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 
 	u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
 
-	pr_info("DEBUG create_initiation: salt before concat : %02x%02x%02x%02x\n",
-		salt[0], salt[1],
-		salt[2], salt[3]);
-
-	pr_info("DEBUG create_initiation: static key before concat : %02x%02x%02x%02x\n",
-		handshake->static_identity->static_public[0], handshake->static_identity->static_public[1],
-		handshake->static_identity->static_public[2], handshake->static_identity->static_public[3]);
-
 	memcpy(concat_salt, salt, 16);
 	memcpy(concat_salt + 16, handshake->static_identity->static_public, NOISE_PUBLIC_KEY_LEN);
-
-	pr_info("DEBUG create_initiation: concat obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
-		concat_salt[0], concat_salt[1],
-		concat_salt[2], concat_salt[3],
-		concat_salt[16], concat_salt[17],
-		concat_salt[18], concat_salt[19]);
 
 	blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
 
@@ -682,23 +643,9 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	memcpy(concat_encrypt, salt, 16);
 	memcpy(concat_encrypt + 16, public_key_hashed, BLAKE2S_HASH_SIZE);
 
-	pr_info("DEBUG create_initiation: plaintext obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
-		concat_encrypt[0], concat_encrypt[1],
-		concat_encrypt[2], concat_encrypt[3],
-		concat_encrypt[16], concat_encrypt[17],
-		concat_encrypt[18], concat_encrypt[19]);
-
 	message_encrypt(dst->encrypted_static,
 			concat_encrypt,
 			BLAKE2S_HASH_SIZE + 16, key, handshake->hash);
-
-	pr_info("DEBUG create_initiation: cipher obtained : %02x%02x%02x%02x\n",
-		dst->encrypted_static[0], dst->encrypted_static[1],
-		dst->encrypted_static[2], dst->encrypted_static[3]);
-
-	pr_info("DEBUG create_initiation: key used for identity : %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
 
 	/* ss */
 	if (!mix_precomputed_dh(handshake->chaining_key, key,
@@ -709,10 +656,6 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	tai64n_now(timestamp);
 	message_encrypt(dst->encrypted_timestamp, timestamp,
 			NOISE_TIMESTAMP_LEN, key, handshake->hash);
-
-	pr_info("DEBUG create_initiation: key used for timestamp : %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -738,30 +681,14 @@ struct wg_peer *wg_pubkey_hash_lookup(u8 salt_hash[16 + BLAKE2S_HASH_SIZE],
 	memcpy(salt, salt_hash, 16);
 	memcpy(hash, salt_hash + 16, BLAKE2S_HASH_SIZE);
 
-	pr_info("DEBUG pubkey_hash_lookup : salt obtained : %02x%02x%02x%02x\n",
-		salt[0], salt[1],
-		salt[2], salt[3]);
-
-	pr_info("DEBUG pubkey_hash_lookup : hash obtained : %02x%02x%02x%02x\n",
-		hash[0], hash[1],
-		hash[2], hash[3]);
-
 	mutex_lock(&wg->device_update_lock);
 
 	list_for_each_entry(peer, &wg->peer_list, peer_list) {
-		pr_info("DEBUG pubkey_hash_lookup : trying a peer \n");
 		u8 concat_salt[NOISE_PUBLIC_KEY_LEN + 16];
 		memcpy(concat_salt, salt, 16);
 		memcpy(concat_salt + 16, peer->handshake.remote_static, NOISE_PUBLIC_KEY_LEN);
-		pr_info("DEBUG pubkey_hash_lookup : peer static tried : %02x%02x%02x%02x\n",
-		peer->handshake.remote_static[0], peer->handshake.remote_static[1],
-		peer->handshake.remote_static[2], peer->handshake.remote_static[3]);
 		blake2s(public_key_hashed, concat_salt, NULL, BLAKE2S_HASH_SIZE, NOISE_PUBLIC_KEY_LEN + 16, 0);
-		pr_info("DEBUG pubkey_hash_lookup : hash obtained from peer : %02x%02x%02x%02x\n",
-		public_key_hashed[0], public_key_hashed[1],
-		public_key_hashed[2], public_key_hashed[3]);
 		if (memcmp(public_key_hashed, hash, BLAKE2S_HASH_SIZE) == 0) {
-			pr_info("DEBUG pubkey_hash_lookup : hash are equals : found peer");
 			peer = wg_peer_get_maybe_zero(peer);
 			break;
 		}
@@ -774,7 +701,6 @@ struct wg_peer *
 wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				      struct wg_device *wg)
 {
-	pr_info("DEBUG consume_initiation : starting the process\n");
 	struct wg_peer *peer = NULL, *ret_peer = NULL;
 	struct noise_handshake *handshake;
 	bool replay_attack, flood_attack;
@@ -787,10 +713,6 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	u8 t[NOISE_TIMESTAMP_LEN];
 	u64 initiation_consumption;
 
-	pr_info("DEBUG consume_initiation: init eph public key DH unencrypted_ephemeral: %02x%02x%02x%02x\n",
-		src->unencrypted_ephemeral[0], src->unencrypted_ephemeral[1],
-		src->unencrypted_ephemeral[2], src->unencrypted_ephemeral[3]);
-
 	down_read(&wg->static_identity.lock);
 	if (unlikely(!wg->static_identity.has_identity))
 		goto out;
@@ -800,48 +722,20 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	/* e */
 	message_ephemeral(e, src->unencrypted_ephemeral, epq, src->mlkem_ephemeral_public, chaining_key, hash);
 
-	pr_info("DEBUG consume_initiation: init eph public key DH e 01: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
-
-	pr_info("DEBUG consume_initiation: MLKEM ephemeral key received : %02x%02x%02x%02x\n",
-		src->mlkem_ephemeral_public[0], src->mlkem_ephemeral_public[1],
-		src->mlkem_ephemeral_public[2], src->mlkem_ephemeral_public[3]);
-
 	/* es */
 	if (!mix_dh(chaining_key, key, wg->static_identity.static_private, e))
 		goto out;
-
-	pr_info("DEBUG consume_initiation: init eph public key DH e 02: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
-
-	pr_info("DEBUG consume_initiation: key used for identity : %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
 
 	/* s */
 	if (!message_decrypt(s, src->encrypted_static,
 			     sizeof(src->encrypted_static), key, hash))
 		goto out;
 
-	pr_info("DEBUG consume_initiation: init eph public key DH e 02.5: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
-
-	pr_info("DEBUG consume_initiation: decrypted concat obtained : %02x%02x%02x%02x(...)%02x%02x%02x%02x\n",
-		s[0], s[1],
-		s[2], s[3],
-		s[16], s[17],
-		s[18], s[19]);
-
 	/* Lookup which peer we're actually talking to */
 	peer = wg_pubkey_hash_lookup(s, wg);
 	if (!peer) {
-		pr_info("DEBUG consume_initiation: peer NOT found !\n");
 		goto out;
 	}
-	pr_info("DEBUG consume_initiation: peer found !\n");
 	handshake = &peer->handshake;
 
 	/* ss */
@@ -849,23 +743,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				handshake->precomputed_static_static))
 	    goto out;
 
-	pr_info("DEBUG consume_initiation: init eph public key DH e 03: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
-
-
-	pr_info("DEBUG consume_initiation: key used for timestamp : %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
-
 	/* {t} */
 	if (!message_decrypt(t, src->encrypted_timestamp,
 			     sizeof(src->encrypted_timestamp), key, hash))
 		goto out;
-
-	pr_info("DEBUG consume_initiation: init eph public key DH e 04: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
 
 	down_read(&handshake->lock);
 	replay_attack = memcmp(t, handshake->latest_timestamp,
@@ -876,10 +757,6 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	up_read(&handshake->lock);
 	if (replay_attack || flood_attack)
 		goto out;
-
-	pr_info("DEBUG consume_initiation: init eph public key DH e 05: %02x%02x%02x%02x\n",
-		e[0], e[1],
-		e[2], e[3]);
 
 	/* Success! Copy everything to peer */
 	down_write(&handshake->lock);
@@ -897,10 +774,6 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	up_write(&handshake->lock);
 	ret_peer = peer;
 
-	pr_info("DEBUG consume_initiation: init eph public key DH in memory: %02x%02x%02x%02x\n",
-		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
-		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
-
 out:
 	memzero_explicit(key, NOISE_SYMMETRIC_KEY_LEN);
 	memzero_explicit(hash, NOISE_HASH_LEN);
@@ -916,10 +789,6 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 {
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	bool ret = false;
-
-	pr_info("DEBUG create_response: init eph public key DH used 01: %02x%02x%02x%02x\n",
-		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
-		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
 
 	/* We need to wait for crng _before_ taking any locks, since
 	 * curve25519_generate_secret uses get_random_bytes_wait.
@@ -940,80 +809,32 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 			handshake->shared_key, handshake->mlkem_ephemeral_public) != 0)
 		goto out;
 
-	pr_info("DEBUG create_response: key used for MLKEM: %02x%02x%02x%02x\n",
-		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
-		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
-
-	pr_info("DEBUG create_response: shared_key obtained: %02x%02x%02x%02x\n",
-		handshake->shared_key[0], handshake->shared_key[1],
-		handshake->shared_key[2], handshake->shared_key[3]);
-
-	pr_info("DEBUG create_response: ciphertext after MLKEM: %02x%02x%02x%02x\n",
-		dst->mlkem_ciphertext[0], dst->mlkem_ciphertext[1],
-		dst->mlkem_ciphertext[2], dst->mlkem_ciphertext[3]);
-
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
 	if (!curve25519_generate_public(dst->unencrypted_ephemeral,
 					handshake->ephemeral_private))
 		goto out;
 
-	pr_info("DEBUG create_response: resp eph public key DH: %02x%02x%02x%02x\n",
-		dst->unencrypted_ephemeral[0], dst->unencrypted_ephemeral[1],
-		dst->unencrypted_ephemeral[2], dst->unencrypted_ephemeral[3]);
-
-	pr_info("DEBUG create_response: resp eph private key DH: %02x%02x%02x%02x\n",
-		handshake->ephemeral_private[0], handshake->ephemeral_private[1],
-		handshake->ephemeral_private[2], handshake->ephemeral_private[3]);
-
-	pr_info("DEBUG create_response: chaining_key C4: %02x%02x%02x%02x\n",
-		handshake->chaining_key[0], handshake->chaining_key[1],
-		handshake->chaining_key[2], handshake->chaining_key[3]);
-
 	message_ephemeral_resp(dst->unencrypted_ephemeral,
 			  dst->unencrypted_ephemeral, dst->mlkem_ciphertext, dst->mlkem_ciphertext, handshake->chaining_key,
 			  handshake->hash);
-
-	pr_info("DEBUG create_response: chaining_key C6: %02x%02x%02x%02x\n",
-		handshake->chaining_key[0], handshake->chaining_key[1],
-		handshake->chaining_key[2], handshake->chaining_key[3]);
-
-	pr_info("DEBUG create_response: init eph public key DH used 02: %02x%02x%02x%02x\n",
-		handshake->remote_ephemeral[0], handshake->remote_ephemeral[1],
-		handshake->remote_ephemeral[2], handshake->remote_ephemeral[3]);
 
 	/* ee */
 	if (!mix_dh_shared_key(handshake->chaining_key, NULL, handshake->ephemeral_private,
 		    handshake->remote_ephemeral, handshake->shared_key))
 		goto out;
 
-	pr_info("DEBUG create_response: chaining_key C7: %02x%02x%02x%02x\n",
-		handshake->chaining_key[0], handshake->chaining_key[1],
-		handshake->chaining_key[2], handshake->chaining_key[3]);
-
 	/* se */
 	if (!mix_dh(handshake->chaining_key, NULL, handshake->ephemeral_private,
 		    handshake->remote_static))
 		goto out;
 
-	pr_info("DEBUG create_response: chaining_key C8: %02x%02x%02x%02x\n",
-		handshake->chaining_key[0], handshake->chaining_key[1],
-		handshake->chaining_key[2], handshake->chaining_key[3]);
-
 	/* psk */
 	mix_psk(handshake->chaining_key, handshake->hash, key,
 		handshake->preshared_key);
 
-	pr_info("DEBUG create_response: chaining_key C9: %02x%02x%02x%02x\n",
-		handshake->chaining_key[0], handshake->chaining_key[1],
-		handshake->chaining_key[2], handshake->chaining_key[3]);
-
 	/* {} */
 	message_encrypt(dst->encrypted_nothing, NULL, 0, key, handshake->hash);
-
-	pr_info("DEBUG create_response: key used for encrypt nothing: %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
 
 	dst->sender_index = wg_index_hashtable_insert(
 		handshake->entry.peer->device->index_hashtable,
@@ -1071,60 +892,24 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 	if (state != HANDSHAKE_CREATED_INITIATION)
 		goto fail;
 
-	pr_info("DEBUG consume_response: ciphertext before MLKEM: %02x%02x%02x%02x\n",
-		mlkem_ciphertext[0], mlkem_ciphertext[1],
-		mlkem_ciphertext[2], mlkem_ciphertext[3]);
-
-	pr_info("DEBUG consume_response: key used for MLKEM: %02x%02x%02x%02x\n",
-		handshake->mlkem_ephemeral_public[0], handshake->mlkem_ephemeral_public[1],
-		handshake->mlkem_ephemeral_public[2], handshake->mlkem_ephemeral_public[3]);
-
 	/*decaps secret PQ*/
 	if (PQCLEAN_MLKEM512_CLEAN_crypto_kem_dec(handshake->shared_key, 
 			mlkem_ciphertext, handshake->mlkem_ephemeral_private) != 0)
 		goto out;
 
-	pr_info("DEBUG consume_response: shared_key after MLKEM: %02x%02x%02x%02x\n",
-		handshake->shared_key[0], handshake->shared_key[1],
-		handshake->shared_key[2], handshake->shared_key[3]);
-
-	pr_info("DEBUG consume_response: chaining_key C4: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
-
 	/* e */
 	message_ephemeral_resp(e, src->unencrypted_ephemeral, mlkem_ciphertext, mlkem_ciphertext, chaining_key, hash);
-
-	pr_info("DEBUG consume_response: chaining_key C6: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
 
 	/* ee */
 	if (!mix_dh_shared_key(chaining_key, NULL, ephemeral_private, e, handshake->shared_key))
 		goto fail;
 
-	pr_info("DEBUG consume_response: chaining_key C7: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
-
 	/* se */
 	if (!mix_dh(chaining_key, NULL, wg->static_identity.static_private, e))
 		goto fail;
-
-	pr_info("DEBUG consume_response: chaining_key C8: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
 	
 	/* psk */
 	mix_psk(chaining_key, hash, key, preshared_key);
-
-	pr_info("DEBUG consume_response: chaining_key C9: %02x%02x%02x%02x\n",
-		chaining_key[0], chaining_key[1],
-		chaining_key[2], chaining_key[3]);
-
-	pr_info("DEBUG consume_response: key used for decrypt nothing: %02x%02x%02x%02x\n",
-		key[0], key[1],
-		key[2], key[3]);
 
 	/* {} */
 	if (!message_decrypt(NULL, src->encrypted_nothing,
@@ -1160,6 +945,8 @@ out:
 	memzero_explicit(preshared_key, NOISE_SYMMETRIC_KEY_LEN);
 	memzero_explicit(mlkem_ciphertext, MLKEM_CIPHERTEXT_LEN);
 	up_read(&wg->static_identity.lock);
+	t_end = ktime_get();
+	pr_info("CHECKTIME: %lld\n", ktime_to_ns(ktime_sub(t_end, t_start)));;
 	return ret_peer;
 }
 

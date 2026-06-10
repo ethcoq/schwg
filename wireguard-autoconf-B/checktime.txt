@@ -1,0 +1,16 @@
+#!/bin/bash
+
+for i in {1..465}; do
+	sudo dmesg --clear
+	
+	ip link del wg0 type wireguard
+	ip link add wg0 type wireguard
+	ip addr add 10.0.0.12/24 dev wg0
+	wg setconf wg0 ./confwgB
+	ip link set wg0 up
+
+	ping -c 1 10.0.0.11 > /dev/null
+	echo $i
+	sudo dmesg | grep CHECKTIME >> durations.txt
+
+done
