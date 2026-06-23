@@ -206,8 +206,8 @@ void PQCLEAN_MLKEM512_CLEAN_indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLIC
     const uint8_t *publicseed = buf;
     const uint8_t *noiseseed = buf + KYBER_SYMBYTES;
     uint8_t nonce = 0;
-    polyvec *a = kmalloc(KYBER_K * sizeof(polyvec), GFP_KERNEL);
-    polyvec e, pkpv, skpv;
+    //polyvec *a = kmalloc(KYBER_K * sizeof(polyvec), GFP_KERNEL);
+    polyvec a[KYBER_K], e, pkpv, skpv;
     if (!a)
         return;
 
@@ -238,7 +238,7 @@ void PQCLEAN_MLKEM512_CLEAN_indcpa_keypair_derand(uint8_t pk[KYBER_INDCPA_PUBLIC
 
     pack_sk(sk, &skpv);
     pack_pk(pk, &pkpv, publicseed);
-    kfree(a);
+    //kfree(a);
 }
 
 
@@ -265,8 +265,8 @@ void PQCLEAN_MLKEM512_CLEAN_indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
     unsigned int i;
     uint8_t seed[KYBER_SYMBYTES];
     uint8_t nonce = 0;
-    polyvec *at = kmalloc(KYBER_K * sizeof(polyvec), GFP_KERNEL);
-    polyvec sp, pkpv, ep, b;
+    //polyvec *at = kmalloc(KYBER_K * sizeof(polyvec), GFP_KERNEL);
+    polyvec at[KYBER_K], sp, pkpv, ep, b;
     poly v, k, epp;
     if (!at)
         return;
@@ -302,7 +302,7 @@ void PQCLEAN_MLKEM512_CLEAN_indcpa_enc(uint8_t c[KYBER_INDCPA_BYTES],
     PQCLEAN_MLKEM512_CLEAN_poly_reduce(&v);
 
     pack_ciphertext(c, &b, &v);
-    kfree(at);
+    //kfree(at);
 }
 
 /*************************************************

@@ -20,6 +20,19 @@
 
 #include <linux/ktime.h>
 ktime_t t_start;
+
+ktime_t t_start_mlkemkeygen;
+ktime_t t_end_mlkemkeygen;
+
+ktime_t t_start_searchpeer;
+ktime_t t_end_searchpeer;
+
+ktime_t t_start_mlkemencaps;
+ktime_t t_end_mlkemencaps,
+
+ktime_t t_start_mlkemdecaps;
+ktime_t t_end_mlkemdecaps;
+
 ktime_t t_end;
 
 /* This implements Noise_IKpsk2:
@@ -611,8 +624,11 @@ wg_noise_handshake_create_initiation(struct message_handshake_initiation *dst,
 	handshake_init(handshake->chaining_key, handshake->hash,
 		       handshake->remote_static);
 
+	t_start_mlkemkeygen = ktime_get();
 	PQCLEAN_MLKEM512_CLEAN_crypto_kem_keypair(handshake->mlkem_ephemeral_public, handshake->mlkem_ephemeral_private);
 	memcpy(dst->mlkem_ephemeral_public, handshake->mlkem_ephemeral_public, MLKEM_PUBLIC_KEY_LEN);
+	t_end_mlkemkeygen = ktime_get();
+	pr_info("CHECKTIME: keygen %lld\n", ktime_to_ns(ktime_sub(t_end_mlkemkeygen, t_start_mlkemkeygen)));
 
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
@@ -732,7 +748,10 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 		goto out;
 
 	/* Lookup which peer we're actually talking to */
+	t_start_searchpeer = ktime_get();
 	peer = wg_pubkey_hash_lookup(s, wg);
+	t_end_searchpeer = ktime_get();
+	pr_info("CHECKTIME: searchpeer %lld\n", ktime_to_ns(ktime_sub(t_end_searchpeer, t_start_searchpeer)));
 	if (!peer) {
 		goto out;
 	}
@@ -805,9 +824,12 @@ bool wg_noise_handshake_create_response(struct message_handshake_response *dst,
 	dst->receiver_index = handshake->remote_index;
 
 	/* encaps secret PQ*/
+	t_start_mlkemencaps = ktime_get();
 	if (PQCLEAN_MLKEM512_CLEAN_crypto_kem_enc(dst->mlkem_ciphertext, 
 			handshake->shared_key, handshake->mlkem_ephemeral_public) != 0)
 		goto out;
+	t_end_mlkemencaps = ktime_get();
+	pr_info("CHECKTIME: encaps %lld\n", ktime_to_ns(ktime_sub(t_end_mlkemencaps, t_start_mlkemencaps)));
 
 	/* e */
 	curve25519_generate_secret(handshake->ephemeral_private);
@@ -893,9 +915,12 @@ wg_noise_handshake_consume_response(struct message_handshake_response *src,
 		goto fail;
 
 	/*decaps secret PQ*/
+	t_start_mlkemdecaps = ktime_get();
 	if (PQCLEAN_MLKEM512_CLEAN_crypto_kem_dec(handshake->shared_key, 
 			mlkem_ciphertext, handshake->mlkem_ephemeral_private) != 0)
 		goto out;
+	t_end_mlkemdecaps = ktime_get();
+	pr_info("CHECKTIME: decaps %lld\n", ktime_to_ns(ktime_sub(t_end_mlkemdecaps, t_start_mlkemdecaps)));
 
 	/* e */
 	message_ephemeral_resp(e, src->unencrypted_ephemeral, mlkem_ciphertext, mlkem_ciphertext, chaining_key, hash);
@@ -946,7 +971,7 @@ out:
 	memzero_explicit(mlkem_ciphertext, MLKEM_CIPHERTEXT_LEN);
 	up_read(&wg->static_identity.lock);
 	t_end = ktime_get();
-	pr_info("CHECKTIME: %lld\n", ktime_to_ns(ktime_sub(t_end, t_start)));;
+	pr_info("CHECKTIME: total %lld\n", ktime_to_ns(ktime_sub(t_end, t_start)));
 	return ret_peer;
 }
 
