@@ -12,8 +12,10 @@ for i in {1..100}; do
 
 	sudo dmesg --clear
 
-	ping -c 1 10.0.0.11  >> ping1.txt
+	ping -c 1 10.0.0.11  >> ping102.txt
 	echo $i
-	sudo dmesg | grep CHECKTIME >> durations1.txt
+	sudo dmesg | grep "CHECKTIME: total" >> durations102.txt
+	sudo dmesg | grep "CHECKTIME: decaps" >> decaps102.txt
+	sudo dmesg | grep "CHECKTIME: keygen" >> keygen102.txt
 
 done

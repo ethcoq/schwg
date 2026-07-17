@@ -1,0 +1,5 @@
+#!/bin/bash
+
+sed -i 's/.*CHECKTIME: decaps \(.*\)/\1/' $1
+
+awk '{s+=$1; n++} END {if(n) print s/n}' $1
