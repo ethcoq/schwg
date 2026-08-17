@@ -1,8 +1,0 @@
-[Interface]
-PrivateKey = OOUJu7CxPrNgP8XZnSRDP2rPrGJ2WrMZKnUN6kZv+2s=
-ListenPort = 48481
-
-[Peer]
-PublicKey = ptKAk0GnWOZY6Il72nQ9bESZ7uGpaLaoaW6bUJejvTo=
-Endpoint = 192.168.0.12:48481
-AllowedIPs = 10.0.0.12/32
