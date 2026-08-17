@@ -20,11 +20,6 @@ set -u
 
 RESDIR="./results_responder"
 
-STAGES=(
-    "encaps:CHECKTIME: encaps:Encaps time"
-    "searchpeer:CHECKTIME: searchpeer:Search peer time"
-)
-
 NPEERS=""
 KEEP=0
 
@@ -57,30 +52,16 @@ REPORT="${RESDIR}/measures_responder.txt"
 CSV="${RESDIR}/measures_responder.csv"
 mkdir -p "$RESDIR"
 
-TMPDMESG="$(mktemp)"
-trap 'rm -f "$TMPDMESG"' EXIT
-
-dmesg > "$TMPDMESG"
-cp "$TMPDMESG" "${PREFIX}_dmesg.txt"
+DUMP="${PREFIX}_dmesg.txt"
+dmesg > "$DUMP"
 
 if [ "$KEEP" -eq 0 ]; then
     dmesg --clear
 fi
 
-stats() {
-    awk '
-      { v=$1+0; s+=v; ss+=v*v; n++;
-        if (n==1 || v<min) min=v;
-        if (n==1 || v>max) max=v }
-      END {
-        if (n==0) { print "n=0 mean=NA min=NA max=NA stddev=NA"; exit }
-        m = s/n; var = ss/n - m*m; if (var < 0) var = 0;
-        printf "n=%d mean=%.3f min=%.3f max=%.3f stddev=%.3f\n", n, m, min, max, sqrt(var)
-      }' "$1"
-}
-
 echo
 echo "=== Results (responder, $NPEERS peers) ==="
+echo "dmesg lines captured: $(wc -l < "$DUMP")"
 
 {
     echo "================================================================"
@@ -95,30 +76,43 @@ if [ ! -f "$CSV" ]; then
     echo "date;peers;stage;n;mean;min;max;stddev" > "$CSV"
 fi
 
-for s in "${STAGES[@]}"; do
-    key="${s%%:*}"
-    rest="${s#*:}"
-    pattern="${rest%%:*}"
-    label="${rest#*:}"
-    f="${PREFIX}_${key}.txt"
+process_stage() {
+    stage="$1"
+    out="${PREFIX}_${stage}.txt"
 
-    sed -n "s/.*${pattern} \([0-9][0-9]*\).*/\1/p" "$TMPDMESG" > "$f"
+    sed -n "s/.*CHECKTIME: ${stage} \([0-9][0-9]*\).*/\1/p" "$DUMP" > "$out"
 
-    line="$(stats "$f")"
-    printf "  %-16s : %s\n" "$label" "$line"
-    printf "%s for %s peers : %s\n" "$label" "$NPEERS" "$line" >> "$REPORT"
+    if [ ! -s "$out" ]; then
+        echo "  WARNING: no value extracted for '$stage'" >&2
+        echo "  Matching dmesg lines: $(grep -c "CHECKTIME: ${stage}" "$DUMP")" >&2
+        grep -m1 "CHECKTIME: ${stage}" "$DUMP" >&2
+    fi
+
+    line=$(awk '
+      { v=$1+0; s+=v; ss+=v*v; n++;
+        if (n==1 || v<min) min=v;
+        if (n==1 || v>max) max=v }
+      END {
+        if (n==0) { print "n=0 mean=NA min=NA max=NA stddev=NA"; exit }
+        m = s/n; var = ss/n - m*m; if (var < 0) var = 0;
+        printf "n=%d mean=%.3f min=%.3f max=%.3f stddev=%.3f\n", n, m, min, max, sqrt(var)
+      }' "$out")
+
+    printf "  %-12s : %s\n" "$stage" "$line"
+    printf "%s for %s peers : %s\n" "$stage" "$NPEERS" "$line" >> "$REPORT"
 
     n=$(echo    "$line" | sed -n 's/.*n=\([0-9]*\).*/\1/p')
     mean=$(echo "$line" | sed -n 's/.*mean=\([0-9.]*\).*/\1/p')
     mn=$(echo   "$line" | sed -n 's/.*min=\([0-9.]*\).*/\1/p')
     mx=$(echo   "$line" | sed -n 's/.*max=\([0-9.]*\).*/\1/p')
     sd=$(echo   "$line" | sed -n 's/.*stddev=\([0-9.]*\).*/\1/p')
-    echo "$(date '+%Y-%m-%d %H:%M:%S');${NPEERS};${key};${n};${mean};${mn};${mx};${sd}" >> "$CSV"
-done
+    echo "$(date '+%Y-%m-%d %H:%M:%S');${NPEERS};${stage};${n};${mean};${mn};${mx};${sd}" >> "$CSV"
+}
+
+process_stage encaps
+process_stage searchpeer
 
 echo "" >> "$REPORT"
-
-rm -f "$TMPDMESG"; trap - EXIT
 
 echo
 echo "Report       : $REPORT"
