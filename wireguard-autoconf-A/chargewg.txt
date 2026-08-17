@@ -11,6 +11,6 @@ echo 'module wireguard +p' | sudo tee /sys/kernel/debug/dynamic_debug/control
 ip addr add 192.168.0.11/24 dev enp0s3
 ip link add wg0 type wireguard
 ip addr add 10.0.0.11/24 dev wg0
-wg setconf wg0 ./confwgA
+wg setconf wg0 ./confwgA100
 ip link set wg0 up
 
