@@ -28,7 +28,7 @@ ktime_t t_start_searchpeer;
 ktime_t t_end_searchpeer;
 
 ktime_t t_start_mlkemencaps;
-ktime_t t_end_mlkemencaps,
+ktime_t t_end_mlkemencaps;
 
 ktime_t t_start_mlkemdecaps;
 ktime_t t_end_mlkemdecaps;
