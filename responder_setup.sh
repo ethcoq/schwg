@@ -20,8 +20,9 @@
 
 set -u
 
-WG_SRC="./schwg/drivers/net/wireguard"
-CONF_DIR="."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WG_SRC="${SCRIPT_DIR}/schwg/drivers/net/wireguard/"
+CONF_DIR="./Config_files"
 IF_LAN="enp0s3"
 IP_LAN="192.168.0.11/24"
 IP_WG="10.0.0.11/24"
