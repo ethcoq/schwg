@@ -52,7 +52,7 @@ closely as possible before comparing numbers.
 |---|---|
 | Host CPU | Intel Core i7-1165G7 @ 2.80 GHz |
 | Guests | 2 virtual machines (VirtualBox) |
-| Guest OS | Ubuntu, kernel 6.17.0-35-generic |
+| Guest OS | Ubuntu 24.04.4 LTS, kernel 6.17.0-35-generic |
 | Guest RAM | 2 GB each |
 | Network | VirtualBox internal network |
 | ML-KEM | ML-KEM-512, PQClean implementation adapted to the kernel |
