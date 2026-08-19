@@ -41,7 +41,7 @@ UNIT_TO_MS = {"ns": 1e-6, "us": 1e-3, "ms": 1.0}
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Plot total WireGuard handshake time versus peer count."
+        description="Plot total SCH-WireGuard handshake time versus peer count."
     )
     p.add_argument("--dir", default="results_initiator",
                    help="directory holding the raw files (default: results_initiator)")
@@ -57,7 +57,7 @@ def parse_args():
                         "to limit the effect of scheduling outliers (default: 0)")
     p.add_argument("--show-range", action="store_true",
                    help="overlay min/max whiskers on top of the standard deviation")
-    p.add_argument("--title", default="WireGuard handshake time versus number of known peers",
+    p.add_argument("--title", default="SCH-WireGuard handshake time versus number of known peers",
                    help="figure title")
     p.add_argument("--out", default="handshake_total",
                    help="output basename, without extension (default: handshake_total)")
